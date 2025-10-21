@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bot, User, Copy, Check, Heart, Bookmark, Sparkles } from "lucide-react";
+import { useMemo } from "react";
 
 interface Message {
   id: string;
@@ -22,7 +22,34 @@ interface ChatMessageProps {
   onCopy: (content: string, messageId: string) => void;
 }
 
+// 링크를 감지하고 JSX 요소로 변환하는 함수
+const parseLinks = (text: string) => {
+  // 더 포괄적인 URL 패턴 (http/https, www 포함/미포함, 괄호 안의 링크 포함)
+  const linkRegex = /(https?:\/\/[^\s\)]+)/g;
+  const parts = text.split(linkRegex);
+
+  return parts.map((part, index) => {
+    if (part.match(/^https?:\/\//)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#00ACA3] hover:text-[#00ACA3]/80 underline decoration-dotted underline-offset-2 transition-colors"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+};
+
 export default function ChatMessage({ message, onLike, onBookmark, onCopy }: ChatMessageProps) {
+  const parsedContent = useMemo(() => {
+    return parseLinks(message.content);
+  }, [message.content]);
   return (
     <div className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
       {message.role === "assistant" && (
@@ -44,7 +71,7 @@ export default function ChatMessage({ message, onLike, onBookmark, onCopy }: Cha
             }`}
         >
           <p className="w-full whitespace-pre-wrap text-sm leading-relaxed">
-            {message.content}
+            {parsedContent}
           </p>
           <div className="flex items-center justify-between mt-2">
             <p className="text-xs opacity-70">

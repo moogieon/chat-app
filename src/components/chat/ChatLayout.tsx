@@ -1,25 +1,22 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send,
-  ShoppingCart,
   Moon,
   Sun,
   ChevronDown,
   Sparkles,
-  Bot
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import HeartAnimation from "@/components/ui/heart-animation";
 import ShootingStarAnimation from "@/components/ui/shooting-star-animation";
 import ChatMessage from "./ChatMessage";
 import TypingIndicator from "./TypingIndicator";
 import Image from "next/image";
+import { sendChatMessage, ChatError } from "@/lib/api";
 
 interface Message {
   id: string;
@@ -35,7 +32,14 @@ export default function ChatLayout() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
-      content: "안녕하세요! 하카봇입니다!💨\n\n•  다양한 전자담배 제품 추천\n• 액상, 기기, 액세서리 정보 제공\n• 구매 상담 및 문의사항 답변\n• 신제품 및 할인 정보 안내\n\n무엇을 도와드릴까요?",
+      content: `안녕하세요! 하카봇입니다!💨
+⭐️저는 25년 1월 기준 정보를 바탕으로 답변합니다⭐️
+
+• 하카 코리아 제품 안내(시그니처, 하카B, 하카Q, 하카H, 하카R)
+• 구매처 안내(직영점, 판매점, 온라인)
+• 기타 응대(보상판매, 주문 관련(상태, 반품, 취소 등), 재입고, 신제품, 홈페이지, 정품등록, 프로모션 등)
+
+무엇을 도와드릴까요 ? `,
       role: "assistant",
       timestamp: new Date(),
     },
@@ -43,12 +47,13 @@ export default function ChatLayout() {
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   const [showShootingStarAnimation, setShowShootingStarAnimation] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // 자동 스크롤
   useEffect(() => {
@@ -76,11 +81,11 @@ export default function ChatLayout() {
     }
   }, [messages]); // messages가 변경될 때마다 다시 설정
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
-  };
+  }, []);
 
   // 다크모드 토글
   useEffect(() => {
@@ -91,7 +96,35 @@ export default function ChatLayout() {
     }
   }, [isDarkMode]);
 
-  const handleSendMessage = async () => {
+  const sendMessageToAPI = useCallback(async (userInput: string): Promise<string> => {
+    try {
+      const session_id = localStorage.getItem("session_id");
+      const data = await sendChatMessage({
+        session_id: session_id || "default-session", // 필요에 따라 동적 세션 ID 사용
+        question: userInput,
+      });
+
+      return data.response || '죄송합니다. 응답을 받지 못했습니다.';
+    } catch (error) {
+      console.error('API 호출 오류:', error);
+      
+      // 구체적인 오류 정보가 있는 경우
+      if (error instanceof Error && 'error' in error && 'message' in error && 'contact' in error) {
+        const chatError = error as Error & ChatError;
+        return `🚨 ${chatError.error}\n\n${chatError.message}\n\n📞 ${chatError.contact}`;
+      }
+      
+      // 일반적인 네트워크 오류
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return `🚨 네트워크 연결 오류\n\n인터넷 연결을 확인하고 다시 시도해주세요.\n\n📞 연결 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`;
+      }
+      
+      // 기타 오류
+      return `🚨 시스템 오류\n\n일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n📞 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`;
+    }
+  }, []);
+
+  const handleSendMessage = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return;
 
     const userMessage: Message = {
@@ -120,58 +153,43 @@ export default function ChatLayout() {
     } catch (error) {
       console.error('메시지 전송 오류:', error);
       setIsTyping(false);
+      
+      // 오류 메시지 생성
+      let errorContent = '🚨 시스템 오류\n\n일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n📞 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.';
+      
+      if (error instanceof Error && 'error' in error && 'message' in error && 'contact' in error) {
+        const chatError = error as Error & ChatError;
+        errorContent = `🚨 ${chatError.error}\n\n${chatError.message}\n\n📞 ${chatError.contact}`;
+      } else if (error instanceof TypeError && error.message.includes('fetch')) {
+        errorContent = `🚨 네트워크 연결 오류\n\n인터넷 연결을 확인하고 다시 시도해주세요.\n\n📞 연결 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`;
+      }
+      
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: '죄송합니다. 일시적인 오류가 발생했습니다.',
+        content: errorContent,
         role: "assistant",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      // AI 응답 완료 후 input에 포커스
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 100);
     }
-  };
+  }, [inputValue, isLoading, sendMessageToAPI]);
 
-  const sendMessageToAPI = async (userInput: string): Promise<string> => {
-    try {
-      const requestBody = {
-        session_id: "chat_session_" + Date.now(),
-        question: userInput,
-        use_rerank_on_unknown: true,
-        top_k_first: 8,
-        top_k_rerank1: 5,
-        top_k_rerank2: 3,
-        temperature: 0
-      };
-
-      const response = await fetch('/api/ai', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error('API 요청 실패');
-      }
-
-      const data = await response.json();
-      return data.answer || '죄송합니다. 응답을 받지 못했습니다.';
-    } catch (error) {
-      console.error('API 호출 오류:', error);
-      return '죄송합니다. 일시적인 오류가 발생했습니다.';
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
-  };
+  }, [handleSendMessage]);
 
-  const copyMessage = async (content: string, messageId: string) => {
+  const copyMessage = useCallback(async (content: string, messageId: string) => {
     try {
       await navigator.clipboard.writeText(content);
       setMessages(prev =>
@@ -193,9 +211,9 @@ export default function ChatLayout() {
     } catch (err) {
       console.error('복사 실패:', err);
     }
-  };
+  }, []);
 
-  const toggleLike = (messageId: string) => {
+  const toggleLike = useCallback((messageId: string) => {
     setMessages(prev =>
       prev.map(msg =>
         msg.id === messageId
@@ -205,9 +223,9 @@ export default function ChatLayout() {
     );
     // 하트 애니메이션 트리거
     setShowHeartAnimation(true);
-  };
+  }, []);
 
-  const toggleBookmark = (messageId: string) => {
+  const toggleBookmark = useCallback((messageId: string) => {
     setMessages(prev =>
       prev.map(msg =>
         msg.id === messageId
@@ -217,7 +235,7 @@ export default function ChatLayout() {
     );
     // 별똥별 애니메이션 트리거
     setShowShootingStarAnimation(true);
-  };
+  }, []);
 
 
 
@@ -242,7 +260,9 @@ export default function ChatLayout() {
                 <Image src="/mainLogo.png" alt="로고" width={100} height={40} />
                 <Sparkles className="h-3 w-3 text-[#00ACA3] absolute -top-1 -right-1" />
               </div>
-
+              <span className="text-sm text-gray-500">
+                단순 고객 응대 챗봇 ver0.1
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -300,6 +320,7 @@ export default function ChatLayout() {
             <div className="flex gap-2 items-center">
               <div className="flex-1 relative">
                 <Textarea
+                  ref={inputRef}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyPress}

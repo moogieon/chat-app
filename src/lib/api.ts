@@ -1,37 +1,49 @@
 export interface ChatRequest {
   session_id: string;
   question: string;
-  use_rerank_on_unknown?: boolean;
-  top_k_first?: number;
-  top_k_rerank1?: number;
-  top_k_rerank2?: number;
-  temperature?: number;
 }
 
 export interface ChatResponse {
-  answer: string;
+  response: string;
   session_id: string;
-  // 필요한 경우 다른 응답 필드들 추가
 }
 
-export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
+export interface ChatError {
+  error: string;
+  message: string;
+  contact: string;
+}
+
+export async function sendChatMessage(
+  request: ChatRequest
+): Promise<ChatResponse> {
   try {
-    const response = await fetch('/api/ai', {
-      method: 'POST',
+    const response = await fetch("/api/ai", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(request),
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
+      // 서버에서 보낸 구체적인 오류 정보가 있는 경우
+      if (data.error && data.message && data.contact) {
+        const error = new Error(data.message) as Error & ChatError;
+        error.error = data.error;
+        error.message = data.message;
+        error.contact = data.contact;
+        throw error;
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
+    localStorage.setItem("session_id", data.session_id);
     return data;
   } catch (error) {
-    console.error('Chat API error:', error);
+    console.error("Chat API error:", error);
     throw error;
   }
 }
