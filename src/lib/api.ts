@@ -3,8 +3,25 @@ export interface ChatRequest {
   question: string;
 }
 
+export interface ImageItem {
+  url: string;
+  title: string;
+}
+
+export interface VideoItem {
+  url: string;
+  title: string;
+  thumbnail_url?: string;
+}
+
+export interface ChatResponseContent {
+  images?: ImageItem[];
+  videos?: VideoItem[];
+  text: string;
+}
+
 export interface ChatResponse {
-  response: string;
+  response: ChatResponseContent;
   session_id: string;
 }
 

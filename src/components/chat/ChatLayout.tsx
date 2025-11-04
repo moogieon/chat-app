@@ -16,7 +16,9 @@ import ShootingStarAnimation from "@/components/ui/shooting-star-animation";
 import ChatMessage from "./ChatMessage";
 import TypingIndicator from "./TypingIndicator";
 import Image from "next/image";
-import { sendChatMessage, ChatError } from "@/lib/api";
+import { sendChatMessage, ChatError, ImageItem, VideoItem, ChatResponseContent } from "@/lib/api";
+
+type MessageType = "text" | "image" | "video";
 
 interface Message {
   id: string;
@@ -26,6 +28,9 @@ interface Message {
   isCopied?: boolean;
   isLiked?: boolean;
   isBookmarked?: boolean;
+  type?: MessageType;
+  image?: ImageItem;
+  video?: VideoItem;
 }
 
 export default function ChatLayout() {
@@ -42,6 +47,7 @@ export default function ChatLayout() {
 무엇을 도와드릴까요 ? `,
       role: "assistant",
       timestamp: new Date(),
+      type: "text",
     },
   ]);
   const [inputValue, setInputValue] = useState("");
@@ -96,7 +102,7 @@ export default function ChatLayout() {
     }
   }, [isDarkMode]);
 
-  const sendMessageToAPI = useCallback(async (userInput: string): Promise<string> => {
+  const sendMessageToAPI = useCallback(async (userInput: string): Promise<ChatResponseContent> => {
     try {
       const session_id = localStorage.getItem("session_id");
       const data = await sendChatMessage({
@@ -104,23 +110,29 @@ export default function ChatLayout() {
         question: userInput,
       });
 
-      return data.response || '죄송합니다. 응답을 받지 못했습니다.';
+      return data.response || { text: '죄송합니다. 응답을 받지 못했습니다.' };
     } catch (error) {
       console.error('API 호출 오류:', error);
-      
+
       // 구체적인 오류 정보가 있는 경우
       if (error instanceof Error && 'error' in error && 'message' in error && 'contact' in error) {
         const chatError = error as Error & ChatError;
-        return `🚨 ${chatError.error}\n\n${chatError.message}\n\n📞 ${chatError.contact}`;
+        return {
+          text: `🚨 ${chatError.error}\n\n${chatError.message}\n\n📞 ${chatError.contact}`
+        };
       }
-      
+
       // 일반적인 네트워크 오류
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        return `🚨 네트워크 연결 오류\n\n인터넷 연결을 확인하고 다시 시도해주세요.\n\n📞 연결 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`;
+        return {
+          text: `🚨 네트워크 연결 오류\n\n인터넷 연결을 확인하고 다시 시도해주세요.\n\n📞 연결 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`
+        };
       }
-      
+
       // 기타 오류
-      return `🚨 시스템 오류\n\n일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n📞 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`;
+      return {
+        text: `🚨 시스템 오류\n\n일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n📞 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`
+      };
     }
   }, []);
 
@@ -132,6 +144,7 @@ export default function ChatLayout() {
       content: inputValue,
       role: "user",
       timestamp: new Date(),
+      type: "text",
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -143,32 +156,74 @@ export default function ChatLayout() {
     try {
       const aiResponse = await sendMessageToAPI(inputValue);
       setIsTyping(false);
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: aiResponse,
-        role: "assistant",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiMessage]);
+
+      const newMessages: Message[] = [];
+      const baseTimestamp = new Date();
+      let messageIdCounter = Date.now() + 1;
+
+      // 이미지 메시지들 추가 (먼저)
+      if (aiResponse.images && aiResponse.images.length > 0) {
+        aiResponse.images.forEach((image) => {
+          newMessages.push({
+            id: messageIdCounter.toString(),
+            content: image.title || "",
+            role: "assistant",
+            timestamp: baseTimestamp,
+            type: "image",
+            image: image,
+          });
+          messageIdCounter++;
+        });
+      }
+
+      // 비디오 메시지들 추가 (두 번째)
+      if (aiResponse.videos && aiResponse.videos.length > 0) {
+        aiResponse.videos.forEach((video) => {
+          newMessages.push({
+            id: messageIdCounter.toString(),
+            content: video.title || "",
+            role: "assistant",
+            timestamp: baseTimestamp,
+            type: "video",
+            video: video,
+          });
+          messageIdCounter++;
+        });
+      }
+
+      // 텍스트 메시지 추가 (마지막)
+      if (aiResponse.text && aiResponse.text.trim()) {
+        newMessages.push({
+          id: messageIdCounter.toString(),
+          content: aiResponse.text,
+          role: "assistant",
+          timestamp: baseTimestamp,
+          type: "text",
+        });
+        messageIdCounter++;
+      }
+
+      setMessages((prev) => [...prev, ...newMessages]);
     } catch (error) {
       console.error('메시지 전송 오류:', error);
       setIsTyping(false);
-      
+
       // 오류 메시지 생성
       let errorContent = '🚨 시스템 오류\n\n일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n📞 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.';
-      
+
       if (error instanceof Error && 'error' in error && 'message' in error && 'contact' in error) {
         const chatError = error as Error & ChatError;
         errorContent = `🚨 ${chatError.error}\n\n${chatError.message}\n\n📞 ${chatError.contact}`;
       } else if (error instanceof TypeError && error.message.includes('fetch')) {
         errorContent = `🚨 네트워크 연결 오류\n\n인터넷 연결을 확인하고 다시 시도해주세요.\n\n📞 연결 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`;
       }
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: errorContent,
         role: "assistant",
         timestamp: new Date(),
+        type: "text",
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
