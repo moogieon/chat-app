@@ -54,6 +54,15 @@ const parseLinks = (text: string, role: "user" | "assistant") => {
         </a>
       );
     }
+    // 텍스트 부분에서 줄바꿈 문자를 <br /> 태그로 변환
+    if (part.includes('\n')) {
+      return part.split('\n').map((line, lineIndex, array) => (
+        <span key={`${index}-${lineIndex}`}>
+          {line}
+          {lineIndex < array.length - 1 && <br />}
+        </span>
+      ));
+    }
     return part;
   });
 };
