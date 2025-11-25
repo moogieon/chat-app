@@ -8,21 +8,22 @@ import {
   ChevronDown,
   Sparkles,
 } from "lucide-react";
+import Image from "next/image";
+
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import HeartAnimation from "@/components/ui/heart-animation";
 import ShootingStarAnimation from "@/components/ui/shooting-star-animation";
+import { Textarea } from "@/components/ui/textarea";
+import { sendChatMessage, ChatError, ImageItem, VideoItem, ChatResponseContent, Citation, MediaCitation } from "@/lib/api";
 import ChatMessage from "./ChatMessage";
 import TypingIndicator from "./TypingIndicator";
-import Image from "next/image";
-import { sendChatMessage, ChatError, ImageItem, VideoItem, ChatResponseContent } from "@/lib/api";
 
 type MessageType = "text" | "image" | "video";
 
 interface Message {
   id: string;
-  content: string;
+  content: string | string[];
   role: "user" | "assistant";
   timestamp: Date;
   isCopied?: boolean;
@@ -31,6 +32,8 @@ interface Message {
   type?: MessageType;
   image?: ImageItem;
   video?: VideoItem;
+  citations?: Citation[];
+  media_citations?: MediaCitation[];
 }
 
 export default function ChatLayout() {
@@ -61,14 +64,12 @@ export default function ChatLayout() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // 자동 스크롤
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // 스크롤 위치 감지
   useEffect(() => {
     const handleScroll = () => {
       if (scrollAreaRef.current) {
@@ -81,11 +82,10 @@ export default function ChatLayout() {
     const scrollElement = scrollAreaRef.current;
     if (scrollElement) {
       scrollElement.addEventListener('scroll', handleScroll);
-      // 초기 상태 확인
       handleScroll();
       return () => scrollElement.removeEventListener('scroll', handleScroll);
     }
-  }, [messages]); // messages가 변경될 때마다 다시 설정
+  }, [messages]);
 
   const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current) {
@@ -93,7 +93,6 @@ export default function ChatLayout() {
     }
   }, []);
 
-  // 다크모드 토글
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -106,32 +105,29 @@ export default function ChatLayout() {
     try {
       const session_id = localStorage.getItem("session_id");
       const data = await sendChatMessage({
-        session_id: session_id || "default-session", // 필요에 따라 동적 세션 ID 사용
+        session_id: session_id || "default-session",
         question: userInput,
       });
 
-      return data.response || { text: '죄송합니다. 응답을 받지 못했습니다.' };
+      return data.response || { text: ['죄송합니다. 응답을 받지 못했습니다.'] };
     } catch (error) {
       console.error('API 호출 오류:', error);
 
-      // 구체적인 오류 정보가 있는 경우
       if (error instanceof Error && 'error' in error && 'message' in error && 'contact' in error) {
         const chatError = error as Error & ChatError;
         return {
-          text: `🚨 ${chatError.error}\n\n${chatError.message}\n\n📞 ${chatError.contact}`
+          text: [`🚨 ${chatError.error}\n\n${chatError.message}\n\n📞 ${chatError.contact}`]
         };
       }
 
-      // 일반적인 네트워크 오류
       if (error instanceof TypeError && error.message.includes('fetch')) {
         return {
-          text: `🚨 네트워크 연결 오류\n\n인터넷 연결을 확인하고 다시 시도해주세요.\n\n📞 연결 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`
+          text: [`🚨 네트워크 연결 오류\n\n인터넷 연결을 확인하고 다시 시도해주세요.\n\n📞 연결 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`]
         };
       }
 
-      // 기타 오류
       return {
-        text: `🚨 시스템 오류\n\n일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n📞 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`
+        text: [`🚨 시스템 오류\n\n일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n📞 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.`]
       };
     }
   }, []);
@@ -152,18 +148,20 @@ export default function ChatLayout() {
     setIsLoading(true);
     setIsTyping(true);
 
-    // API 호출
     try {
-      const aiResponse = await sendMessageToAPI(inputValue);
+      const response = await sendMessageToAPI(inputValue);
       setIsTyping(false);
 
       const newMessages: Message[] = [];
       const baseTimestamp = new Date();
       let messageIdCounter = Date.now() + 1;
 
-      // 이미지 메시지들 추가 (먼저)
-      if (aiResponse.images && aiResponse.images.length > 0) {
-        aiResponse.images.forEach((image) => {
+      if (response.images && response.images.length > 0) {
+        response.images.forEach((image) => {
+          const relatedMediaCitations = response.media_citations?.filter(
+            mc => mc.type === 'image' && mc.media_id === image.id?.toString()
+          );
+
           newMessages.push({
             id: messageIdCounter.toString(),
             content: image.title || "",
@@ -171,14 +169,18 @@ export default function ChatLayout() {
             timestamp: baseTimestamp,
             type: "image",
             image: image,
+            media_citations: relatedMediaCitations,
           });
           messageIdCounter++;
         });
       }
 
-      // 비디오 메시지들 추가 (두 번째)
-      if (aiResponse.videos && aiResponse.videos.length > 0) {
-        aiResponse.videos.forEach((video) => {
+      if (response.videos && response.videos.length > 0) {
+        response.videos.forEach((video) => {
+          const relatedMediaCitations = response.media_citations?.filter(
+            mc => mc.type === 'video' && mc.media_id === video.id?.toString()
+          );
+
           newMessages.push({
             id: messageIdCounter.toString(),
             content: video.title || "",
@@ -186,19 +188,30 @@ export default function ChatLayout() {
             timestamp: baseTimestamp,
             type: "video",
             video: video,
+            media_citations: relatedMediaCitations,
           });
           messageIdCounter++;
         });
       }
 
-      // 텍스트 메시지 추가 (마지막)
-      if (aiResponse.text && aiResponse.text.trim()) {
+      if (response.text && Array.isArray(response.text) && response.text.length > 0) {
         newMessages.push({
           id: messageIdCounter.toString(),
-          content: aiResponse.text,
+          content: response.text,
           role: "assistant",
           timestamp: baseTimestamp,
           type: "text",
+          citations: response.citations,
+        });
+        messageIdCounter++;
+      } else if (response.text && Array.isArray(response.text) && response.text.length > 0) {
+        newMessages.push({
+          id: messageIdCounter.toString(),
+          content: response.text,
+          role: "assistant",
+          timestamp: baseTimestamp,
+          type: "text",
+          citations: response.citations,
         });
         messageIdCounter++;
       }
@@ -208,7 +221,6 @@ export default function ChatLayout() {
       console.error('메시지 전송 오류:', error);
       setIsTyping(false);
 
-      // 오류 메시지 생성
       let errorContent = '🚨 시스템 오류\n\n일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n📞 문제가 지속되면 고객센터(1588-0000)로 문의해주세요.';
 
       if (error instanceof Error && 'error' in error && 'message' in error && 'contact' in error) {
@@ -228,7 +240,6 @@ export default function ChatLayout() {
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
-      // AI 응답 완료 후 input에 포커스
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
@@ -244,9 +255,10 @@ export default function ChatLayout() {
     }
   }, [handleSendMessage]);
 
-  const copyMessage = useCallback(async (content: string, messageId: string) => {
+  const copyMessage = useCallback(async (content: string | string[], messageId: string) => {
     try {
-      await navigator.clipboard.writeText(content);
+      const textToCopy = Array.isArray(content) ? content.join('\n') : content;
+      await navigator.clipboard.writeText(textToCopy);
       setMessages(prev =>
         prev.map(msg =>
           msg.id === messageId
@@ -276,7 +288,6 @@ export default function ChatLayout() {
           : msg
       )
     );
-    // 하트 애니메이션 트리거
     setShowHeartAnimation(true);
   }, []);
 
@@ -288,7 +299,6 @@ export default function ChatLayout() {
           : msg
       )
     );
-    // 별똥별 애니메이션 트리거
     setShowShootingStarAnimation(true);
   }, []);
 
@@ -306,7 +316,6 @@ export default function ChatLayout() {
         isVisible={showShootingStarAnimation}
         onAnimationEnd={() => setShowShootingStarAnimation(false)}
       />
-      {/* 헤더 */}
       <Card className="rounded-none border-b-0 shadow-sm flex-shrink-0">
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
@@ -334,7 +343,6 @@ export default function ChatLayout() {
         </CardContent>
       </Card>
 
-      {/* 메시지 영역 */}
       <div className="flex-1 relative overflow-hidden">
         <div
           className="h-full px-[5%] py-4 overflow-y-auto"
@@ -352,12 +360,10 @@ export default function ChatLayout() {
               />
             ))}
 
-            {/* 타이핑 인디케이터 */}
             {isTyping && <TypingIndicator />}
           </div>
         </div>
 
-        {/* 스크롤 버튼 */}
         <Button
           onClick={scrollToBottom}
           className={`fixed bottom-[20%] right-4 h-10 w-10 rounded-full bg-[#00ACA3] hover:bg-[#00ACA3]/90 shadow-lg z-50 transition-opacity duration-200 ${showScrollButton ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -368,7 +374,6 @@ export default function ChatLayout() {
         </Button>
       </div>
 
-      {/* 입력 영역 */}
       <Card className="rounded-none border-t-0 shadow-sm flex-shrink-0">
         <CardContent className="py-2 px-[5%]">
           <div>

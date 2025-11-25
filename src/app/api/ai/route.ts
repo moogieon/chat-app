@@ -6,7 +6,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // 실제 서버로 요청 전달
     const response = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
       headers: {
@@ -14,7 +13,6 @@ export async function POST(request: NextRequest) {
         'accept': 'application/json',
       },
       body: JSON.stringify(body),
-      // 타임아웃 설정 (10초)
       signal: AbortSignal.timeout(10000),
     });
 
@@ -55,7 +53,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('API error:', error);
 
-    // 타임아웃 오류
     if (error instanceof Error && error.name === 'TimeoutError') {
       return NextResponse.json(
         {
@@ -67,7 +64,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 네트워크 오류
     if (error instanceof TypeError && error.message.includes('fetch')) {
       return NextResponse.json(
         {
@@ -79,7 +75,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 기타 오류
     return NextResponse.json(
       {
         error: '시스템 오류',

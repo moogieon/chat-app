@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
 import { Sparkles } from "lucide-react";
 import Image from "next/image";
+
+import { BackgroundGradientAnimation } from "@/components/ui/background-gradient-animation";
 
 interface LandingPageProps {
   onComplete: () => void;

@@ -6,18 +6,37 @@ export interface ChatRequest {
 export interface ImageItem {
   url: string;
   title: string;
+  id?: number;
 }
 
 export interface VideoItem {
   url: string;
   title: string;
   thumbnail_url?: string;
+  id?: number;
+}
+
+export interface Citation {
+  doc_id: string;
+  chunk_id: string;
+  sentences: number[];
+}
+
+export interface MediaCitation {
+  media_id: string;
+  type: string;
+  doc_id?: string;
+  chunk_id: string;
+  related_sentences: number[];
 }
 
 export interface ChatResponseContent {
   images?: ImageItem[];
   videos?: VideoItem[];
-  text: string;
+  text: string[];
+  citations?: Citation[];
+  media_citations?: MediaCitation[];
+  is_unknown?: boolean;
 }
 
 export interface ChatResponse {
@@ -46,7 +65,6 @@ export async function sendChatMessage(
     const data = await response.json();
 
     if (!response.ok) {
-      // 서버에서 보낸 구체적인 오류 정보가 있는 경우
       if (data.error && data.message && data.contact) {
         const error = new Error(data.message) as Error & ChatError;
         error.error = data.error;
