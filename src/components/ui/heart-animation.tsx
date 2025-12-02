@@ -13,19 +13,16 @@ export default function HeartAnimation({ isVisible, onAnimationEnd }: HeartAnima
   const prevIsVisibleRef = useRef(false);
 
   useEffect(() => {
-    // isVisible이 false에서 true로 바뀔 때만 애니메이션 실행
     if (isVisible && !prevIsVisibleRef.current) {
-      // 여러 개의 하트를 랜덤한 위치에 생성
       const newHearts = Array.from({ length: 20 }, (_, i) => ({
         id: i,
-        x: Math.random() * 100, // 화면 너비의 0-100%
-        y: Math.random() * 100, // 화면 높이의 0-100%
-        delay: Math.random() * 1000, // 0-1000ms 지연
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        delay: Math.random() * 1000,
       }));
 
       setHearts(newHearts);
 
-      // 애니메이션 완료 후 콜백 호출
       const timer = setTimeout(() => {
         onAnimationEnd();
       }, 2000);
@@ -33,7 +30,6 @@ export default function HeartAnimation({ isVisible, onAnimationEnd }: HeartAnima
       return () => clearTimeout(timer);
     }
 
-    // 현재 상태를 이전 상태로 저장
     prevIsVisibleRef.current = isVisible;
   }, [isVisible, onAnimationEnd]);
 

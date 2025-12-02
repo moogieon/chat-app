@@ -20,7 +20,6 @@ export default function Home() {
 
     setIsLoading(false);
 
-    // 5초 후에 랜딩 페이지 완료 가능하도록 설정
     const timer = setTimeout(() => {
       setCanComplete(true);
     }, 5000);
@@ -37,8 +36,6 @@ export default function Home() {
     }, 10000);
     setShowLanding(false);
   };
-
-
 
   return (
     <main className="flex h-screen w-full">
